@@ -4,6 +4,7 @@ import random
 import atexit
 import weakref
 import threading
+import time
 from concurrent.futures.thread import ThreadPoolExecutor, _base, _WorkItem, _python_exit, _threads_queues
 
 ########################################################################################################################
@@ -77,6 +78,15 @@ def _worker(executor_reference, work_queue):
 
 
 class PriorityThreadPoolExecutor(ThreadPoolExecutor):
+    class _PriorityWorkItem(_WorkItem):
+        def __init__(self, f, fn, *args, **kwargs):
+            super(PriorityThreadPoolExecutor._PriorityWorkItem, self).__init__(f, fn, *args, **kwargs)
+            self._time = time.time()
+
+        def __lt__(self, other):
+            return self._time < other._time
+
+
     """
 
     Thread pool executor with priority queue (priorities must be different, lowest first)
@@ -95,40 +105,29 @@ class PriorityThreadPoolExecutor(ThreadPoolExecutor):
                                                          thread_name_prefix = thread_name_prefix,
                                                          initializer = initializer,
                                                          initargs = initargs)
-
-        # change work queue type to queue.PriorityQueue
-
         self._work_queue = queue.PriorityQueue()
 
     # ------------------------------------------------------------------------------------------------------------------
 
-    def submit(self, fn, *args, **kwargs):
+    def submit(self, priority, fn, *args, **kwargs):
         """
-
         Sending the function to the execution queue
 
+        :param priority: priority of the task
+        :type priority: int
         :param fn: function being executed
         :type fn: callable
         :param args: function's positional arguments
         :param kwargs: function's keywords arguments
         :return: future instance
         :rtype: _base.Future
-
-        Added keyword:
-
-        - priority (integer later sys.maxsize)
-
         """
         with self._shutdown_lock:
             if self._shutdown:
                 raise RuntimeError('cannot schedule new futures after shutdown')
 
-            priority = kwargs.get('priority', random.randint(0, sys.maxsize-1))
-            if 'priority' in kwargs:
-                del kwargs['priority']
-
             f = _base.Future()
-            w = _WorkItem(f, fn, args, kwargs)
+            w = PriorityThreadPoolExecutor._PriorityWorkItem(f, fn, args, kwargs)
 
             self._work_queue.put((priority, w))
             self._adjust_thread_count()
