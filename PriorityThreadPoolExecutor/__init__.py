@@ -82,7 +82,7 @@ class PriorityThreadPoolExecutor(ThreadPoolExecutor):
     Thread pool executor with priority queue (priorities must be different, lowest first)
 
     """
-    def __init__(self, max_workers=None):
+    def __init__(self, max_workers=None, thread_name_prefix='', initializer=None, initargs=()):
         """
 
         Initializes a new PriorityThreadPoolExecutor instance
@@ -91,7 +91,10 @@ class PriorityThreadPoolExecutor(ThreadPoolExecutor):
         :type max_workers: int
 
         """
-        super(PriorityThreadPoolExecutor, self).__init__(max_workers)
+        super(PriorityThreadPoolExecutor, self).__init__(max_workers = max_workers,
+                                                         thread_name_prefix = thread_name_prefix,
+                                                         initializer = initializer,
+                                                         initargs = initargs)
 
         # change work queue type to queue.PriorityQueue
 
@@ -141,8 +144,10 @@ class PriorityThreadPoolExecutor(ThreadPoolExecutor):
         """
         def weak_ref_cb(_, q=self._work_queue):
             q.put(NULL_ENTRY)
-        if len(self._threads) < self._max_workers:
+        no_threads = len(self._threads)
+        if no_threads < self._max_workers:
             t = threading.Thread(target=_worker,
+                                 name = "%s-%d" % (self._thread_name_prefix, no_threads),
                                  args=(weakref.ref(self, weak_ref_cb),
                                        self._work_queue))
             t.daemon = True
